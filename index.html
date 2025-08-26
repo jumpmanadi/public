@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniConnect - Chat with your university peers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #localVideo, #remoteVideo {
+            transform: scaleX(-1);
+        }
+        .chat-bubble-me {
+            background-color: #4f46e5;
+            color: white;
+        }
+        .chat-bubble-them {
+            background-color: #374151;
+            color: #f3f4f6;
+        }
+        /* Custom scrollbar for chat */
+        #messages::-webkit-scrollbar {
+            width: 8px;
+        }
+        #messages::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        #messages::-webkit-scrollbar-thumb {
+            background-color: #4b5563;
+            border-radius: 20px;
+            border: 3px solid #1f2937;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
+
+    <div id="app-container" class="w-full h-screen flex flex-col items-center justify-center p-4">
+
+        <!-- Verification Screen -->
+        <div id="verification-screen" class="w-full max-w-md">
+            <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl text-center">
+                <h1 class="text-4xl font-bold text-indigo-400 mb-2">UniConnect</h1>
+                <p class="text-gray-400 mb-8">Anonymous video chat with verified students from your university.</p>
+
+                <div id="email-step">
+                    <p class="mb-4 text-gray-300">Enter your university email (.edu) to begin.</p>
+                    <input type="email" id="email-input" placeholder="your.name@university.edu.in" class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition text-white">
+                    <button id="send-otp-btn" class="w-full mt-4 bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition transform hover:scale-105">
+                        Get Verification Code
+                    </button>
+                    <p id="email-error" class="text-red-400 text-sm mt-2 h-5"></p>
+                </div>
+
+                <div id="otp-step" class="hidden">
+                    <p class="mb-4 text-gray-300">A code was sent to <strong id="user-email-display" class="text-indigo-400"></strong>. Check your console for the code.</p>
+                    <input type="text" id="otp-input" placeholder="123456" class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-center tracking-widest text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition text-white">
+                    <button id="verify-otp-btn" class="w-full mt-4 bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition transform hover:scale-105">
+                        Verify & Start
+                    </button>
+                    <p id="otp-error" class="text-red-400 text-sm mt-2 h-5"></p>
+                </div>
+                <p id="media-error" class="text-red-400 text-center mt-4 hidden"></p>
+            </div>
+        </div>
+
+        <!-- Waiting Screen -->
+        <div id="waiting-screen" class="hidden text-center">
+             <h2 class="text-3xl font-semibold text-gray-200 mb-4">Searching for a partner...</h2>
+             <div class="flex justify-center items-center space-x-2 my-8">
+                 <div class="w-5 h-5 bg-indigo-500 rounded-full animate-bounce"></div>
+                 <div class="w-5 h-5 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 0.2s;"></div>
+                 <div class="w-5 h-5 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 0.4s;"></div>
+             </div>
+             <p class="text-gray-400">You are in the queue for <strong id="university-display" class="text-indigo-400"></strong></p>
+             <button id="cancel-search-btn" class="mt-8 bg-gray-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-gray-700 transition">Cancel</button>
+        </div>
+
+        <!-- Main Chat & Video Screen -->
+        <div id="main-screen" class="hidden w-full h-full flex-col lg:flex-row gap-4 p-4">
+            <!-- Video Area -->
+            <div class="flex-grow flex flex-col bg-gray-800 rounded-2xl overflow-hidden shadow-2xl">
+                <div class="relative flex-1 bg-black flex items-center justify-center">
+                    <video id="remoteVideo" autoplay playsinline class="h-full w-full object-cover"></video>
+                    <div id="partner-disconnected-msg" class="hidden absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center text-center p-4">
+                        <h3 class="text-2xl font-bold mb-4">Partner has disconnected</h3>
+                        <button id="find-new-partner-btn" class="bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition">Find a New Partner</button>
+                    </div>
+                </div>
+                <div class="relative h-1/4 min-h-[120px]">
+                    <video id="localVideo" autoplay playsinline muted class="absolute bottom-4 right-4 h-32 w-48 object-cover rounded-lg border-2 border-gray-600 z-10"></video>
+                    <div class="flex items-center justify-center h-full gap-4 bg-gray-900 bg-opacity-50">
+                        <button id="toggle-mic-btn" class="w-14 h-14 bg-gray-700 rounded-full flex items-center justify-center text-2xl hover:bg-gray-600 transition"><i class="fas fa-microphone"></i></button>
+                        <button id="toggle-cam-btn" class="w-14 h-14 bg-gray-700 rounded-full flex items-center justify-center text-2xl hover:bg-gray-600 transition"><i class="fas fa-video"></i></button>
+                        <button id="end-call-btn" class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center text-3xl hover:bg-red-700 transition"><i class="fas fa-phone-slash"></i></button>
+                    </div>
+                </div>
+            </div>
+            <!-- Chat Area -->
+            <div class="w-full lg:w-96 flex flex-col bg-gray-800 rounded-2xl shadow-2xl h-96 lg:h-auto">
+                <div class="p-4 border-b border-gray-700">
+                    <h2 class="font-bold text-lg">Chat</h2>
+                </div>
+                <div id="messages" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
+                    <!-- Chat messages will be appended here -->
+                </div>
+                <div class="p-4 border-t border-gray-700">
+                    <div class="flex">
+                        <input type="text" id="message-input" placeholder="Type a message..." class="flex-grow bg-gray-700 rounded-l-lg px-4 focus:outline-none text-white">
+                        <button id="send-message-btn" class="bg-indigo-600 px-5 py-3 rounded-r-lg font-semibold hover:bg-indigo-700 transition">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, addDoc, collection, onSnapshot, query, limit, deleteDoc, serverTimestamp, orderBy, getDocs, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+        // --- IMPORTANT: FIREBASE CONFIGURATION ---
+        // This configuration is automatically provided by the environment when run in the platform.
+        // For local testing, you would replace this with your own Firebase project configuration.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config)
+            : {}; // Fallback to an empty object if not provided
+
+        // --- INITIALIZE FIREBASE ---
+        let app, db, auth;
+        if (firebaseConfig.apiKey) {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } else {
+            console.error("Firebase configuration is missing. The app cannot start.");
+            // You could display an error message to the user on the page itself.
+            document.body.innerHTML = '<div class="text-white text-center p-8">Error: Firebase configuration is missing. Cannot initialize the application.</div>';
+        }
+        
+
+        // --- DOM ELEMENTS ---
+        const verificationScreen = document.getElementById('verification-screen');
+        const waitingScreen = document.getElementById('waiting-screen');
+        const mainScreen = document.getElementById('main-screen');
+        const emailInput = document.getElementById('email-input');
+        const sendOtpBtn = document.getElementById('send-otp-btn');
+        const otpInput = document.getElementById('otp-input');
+        const verifyOtpBtn = document.getElementById('verify-otp-btn');
+        const emailError = document.getElementById('email-error');
+        const otpError = document.getElementById('otp-error');
+        const emailStep = document.getElementById('email-step');
+        const otpStep = document.getElementById('otp-step');
+        const userEmailDisplay = document.getElementById('user-email-display');
+        const universityDisplay = document.getElementById('university-display');
+        const cancelSearchBtn = document.getElementById('cancel-search-btn');
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const endCallBtn = document.getElementById('end-call-btn');
+        const toggleMicBtn = document.getElementById('toggle-mic-btn');
+        const toggleCamBtn = document.getElementById('toggle-cam-btn');
+        const messagesContainer = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const sendMessageBtn = document.getElementById('send-message-btn');
+        const partnerDisconnectedMsg = document.getElementById('partner-disconnected-msg');
+        const findNewPartnerBtn = document.getElementById('find-new-partner-btn');
+        const mediaError = document.getElementById('media-error');
+
+        // --- APP STATE ---
+        let state = {
+            userId: null,
+            universityDomain: null,
+            generatedOtp: null,
+            localStream: null,
+            remoteStream: null,
+            peerConnection: null,
+            currentRoomId: null,
+            unsubRoom: null,
+            unsubCandidates: null,
+            unsubMessages: null,
+            isMicOn: true,
+            isCamOn: true,
+        };
+
+        // --- WEBRTC CONFIGURATION ---
+        const servers = {
+            iceServers: [
+                { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+            ],
+            iceCandidatePoolSize: 10,
+        };
+
+        // --- VALID UNIVERSITY DOMAINS (for demo) ---
+        const VALID_DOMAINS = new Set(['stanford.edu', 'harvard.edu', 'mit.edu', 'berkeley.edu', 'ucla.edu', 'bennett.edu.in']);
+
+        // --- MAIN APP LOGIC ---
+
+        async function init() {
+            if (!auth) return; // Stop if Firebase didn't initialize
+            try {
+                const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (authToken) {
+                    const userCredential = await signInWithCustomToken(auth, authToken);
+                    state.userId = userCredential.user.uid;
+                    console.log("Signed in with custom token, UID:", state.userId);
+                } else {
+                    const userCredential = await signInAnonymously(auth);
+                    state.userId = userCredential.user.uid;
+                    console.log("Signed in anonymously, UID:", state.userId);
+                }
+            } catch (error) {
+                console.error("Authentication failed:", error);
+                document.body.innerHTML = `<div class="text-white text-center p-8">Error: Authentication failed. ${error.message}</div>`;
+            }
+        }
+        
+        // --- VERIFICATION LOGIC ---
+        sendOtpBtn.onclick = () => {
+            const email = emailInput.value.trim().toLowerCase();
+            const emailParts = email.split('@');
+
+            if (emailParts.length !== 2 || !emailParts[1]) {
+                emailError.textContent = 'Please enter a valid email address.';
+                return;
+            }
+
+            const domain = emailParts[1];
+
+            // Updated validation logic to accept domains like .edu and .edu.in
+            if (!domain.includes('.edu')) {
+                emailError.textContent = 'Please provide a valid university email address.';
+                return;
+            }
+            
+            if (!VALID_DOMAINS.has(domain)) {
+                emailError.textContent = 'This university is not supported yet.';
+                return;
+            }
+            
+            emailError.textContent = '';
+            state.universityDomain = domain;
+            state.generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            console.log(`%c UniConnect Verification Code: ${state.generatedOtp}`, 'color: #818cf8; font-size: 20px; font-weight: bold;');
+
+            emailStep.classList.add('hidden');
+            otpStep.classList.remove('hidden');
+            userEmailDisplay.textContent = email;
+        };
+
+        verifyOtpBtn.onclick = () => {
+            if (otpInput.value === state.generatedOtp) {
+                otpError.textContent = '';
+                startApp();
+            } else {
+                otpError.textContent = 'Invalid verification code.';
+            }
+        };
+
+        // --- APP FLOW ---
+        async function startApp() {
+            verificationScreen.classList.add('hidden');
+            mainScreen.classList.add('hidden');
+            waitingScreen.classList.remove('hidden');
+            universityDisplay.textContent = state.universityDomain;
+            
+            const hasMedia = await setupMediaDevices();
+            if (hasMedia) {
+                await findPartner();
+            }
+        }
+
+        async function setupMediaDevices() {
+            try {
+                state.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideo.srcObject = state.localStream;
+                mediaError.classList.add('hidden');
+                return true;
+            } catch (e) {
+                console.error("Error accessing media devices.", e);
+                mediaError.textContent = "Could not access camera/microphone. Please check permissions and refresh.";
+                mediaError.classList.remove('hidden');
+                waitingScreen.classList.add('hidden');
+                verificationScreen.classList.remove('hidden');
+                return false;
+            }
+        }
+        
+        // --- MATCHMAKING LOGIC ---
+        async function findPartner() {
+            // Listen for a room assignment on my user document first
+            const userDocRef = doc(db, `users/${state.userId}`);
+            state.unsubRoom = onSnapshot(userDocRef, (doc) => {
+                if (doc.exists() && doc.data().roomId) {
+                    const roomId = doc.data().roomId;
+                    if (state.unsubRoom) state.unsubRoom(); 
+                    
+                    const waitingRef = doc(db, `waiting/${state.universityDomain}/users/${state.userId}`);
+                    deleteDoc(waitingRef).catch(() => {});
+                    
+                    joinRoom(roomId);
+                }
+            });
+
+            // Now, check if there's someone else waiting
+            const waitingPoolRef = collection(db, `waiting/${state.universityDomain}/users`);
+            const q = query(waitingPoolRef, where("userId", "!=", state.userId), limit(1));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                // Found a partner
+                const partnerDoc = querySnapshot.docs[0];
+                const partnerId = partnerDoc.id;
+
+                // Create a new room and assign both users to it
+                const newRoomRef = doc(collection(db, 'rooms'));
+                await setDoc(newRoomRef, { createdAt: serverTimestamp(), users: [state.userId, partnerId] });
+
+                const partnerUserDocRef = doc(db, `users/${partnerId}`);
+                await setDoc(userDocRef, { roomId: newRoomRef.id });
+                await setDoc(partnerUserDocRef, { roomId: newRoomRef.id });
+                // The onSnapshot listener will now trigger for both users
+            } else {
+                // No partner found, add myself to the waiting pool
+                const myWaitingRef = doc(db, `waiting/${state.universityDomain}/users/${state.userId}`);
+                await setDoc(myWaitingRef, { joinedAt: serverTimestamp(), userId: state.userId });
+            }
+        }
+
+        cancelSearchBtn.onclick = async () => {
+            if (state.unsubRoom) state.unsubRoom();
+            const waitingRef = doc(db, `waiting/${state.universityDomain}/users/${state.userId}`);
+            await deleteDoc(waitingRef);
+            window.location.reload();
+        };
+
+        // --- ROOM & WEBRTC LOGIC ---
+        async function joinRoom(roomId) {
+            state.currentRoomId = roomId;
+            waitingScreen.classList.add('hidden');
+            mainScreen.classList.remove('hidden');
+
+            const roomRef = doc(db, 'rooms', roomId);
+            const roomDoc = await getDoc(roomRef);
+            if (!roomDoc.exists()) {
+                console.error("Room does not exist!");
+                return;
+            }
+            
+            console.log('Joined room:', roomId);
+            registerPeerConnectionListeners(roomRef);
+
+            const roomData = roomDoc.data();
+            const amICaller = roomData.users[0] === state.userId;
+
+            if (amICaller) {
+                 // I am the first person, I will create the offer
+                 await createOffer(roomRef);
+            } else {
+                // I am the second person to join (caller already created an offer)
+                if (roomData.offer) {
+                    await handleOffer(roomData.offer, roomRef);
+                }
+            }
+            
+            listenForMessages(roomId);
+        }
+
+        function registerPeerConnectionListeners(roomRef) {
+            state.peerConnection = new RTCPeerConnection(servers);
+
+            state.localStream.getTracks().forEach(track => {
+                state.peerConnection.addTrack(track, state.localStream);
+            });
+
+            const iceCandidatesRef = collection(roomRef, 'iceCandidates');
+            
+            state.peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    addDoc(iceCandidatesRef, event.candidate.toJSON());
+                }
+            };
+
+            state.peerConnection.ontrack = event => {
+                state.remoteStream = event.streams[0];
+                remoteVideo.srcObject = state.remoteStream;
+            };
+            
+            state.unsubCandidates = onSnapshot(iceCandidatesRef, (snapshot) => {
+                snapshot.docChanges().forEach(async change => {
+                    if (change.type === 'added') {
+                        const data = change.doc.data();
+                        if (state.peerConnection.remoteDescription) {
+                           await state.peerConnection.addIceCandidate(new RTCIceCandidate(data));
+                        }
+                    }
+                });
+            });
+            
+            state.peerConnection.onconnectionstatechange = () => {
+                if (state.peerConnection.connectionState === 'disconnected' || state.peerConnection.connectionState === 'failed' || state.peerConnection.connectionState === 'closed') {
+                    handlePartnerDisconnect();
+                }
+            };
+        }
+
+        async function createOffer(roomRef) {
+            const offerDescription = await state.peerConnection.createOffer();
+            await state.peerConnection.setLocalDescription(offerDescription);
+
+            const offer = { sdp: offerDescription.sdp, type: offerDescription.type };
+            await setDoc(roomRef, { offer }, { merge: true });
+
+            onSnapshot(roomRef, async (doc) => {
+                const data = doc.data();
+                if (!state.peerConnection.currentRemoteDescription && data?.answer) {
+                    const answerDescription = new RTCSessionDescription(data.answer);
+                    await state.peerConnection.setRemoteDescription(answerDescription);
+                }
+            });
+        }
+        
+        async function handleOffer(offer, roomRef) {
+             await state.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+             const answerDescription = await state.peerConnection.createAnswer();
+             await state.peerConnection.setLocalDescription(answerDescription);
+             
+             const answer = { type: answerDescription.type, sdp: answerDescription.sdp };
+             await setDoc(roomRef, { answer }, { merge: true });
+        }
+
+        // --- CHAT LOGIC ---
+        function listenForMessages(roomId) {
+            const messagesRef = collection(db, `rooms/${roomId}/messages`);
+            const q = query(messagesRef, orderBy('timestamp', 'asc'));
+
+            state.unsubMessages = onSnapshot(q, (snapshot) => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added') {
+                        const data = change.doc.data();
+                        const bubble = document.createElement('div');
+                        bubble.className = `p-3 rounded-xl max-w-xs ${data.senderId === state.userId ? 'chat-bubble-me self-end' : 'chat-bubble-them self-start'}`;
+                        bubble.textContent = data.text;
+                        messagesContainer.appendChild(bubble);
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                    }
+                });
+            });
+        }
+
+        sendMessageBtn.onclick = async () => {
+            const text = messageInput.value.trim();
+            if (text && state.currentRoomId) {
+                messageInput.value = '';
+                const messagesRef = collection(db, `rooms/${state.currentRoomId}/messages`);
+                await addDoc(messagesRef, {
+                    text: text,
+                    senderId: state.userId,
+                    timestamp: serverTimestamp()
+                });
+            }
+        };
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendMessageBtn.click();
+            }
+        });
+
+        // --- CONTROLS AND CLEANUP ---
+        endCallBtn.onclick = () => hangUp();
+        findNewPartnerBtn.onclick = () => {
+            partnerDisconnectedMsg.classList.add('hidden');
+            resetState();
+            startApp();
+        };
+
+        function handlePartnerDisconnect() {
+            if (!partnerDisconnectedMsg.classList.contains('hidden')) return;
+            partnerDisconnectedMsg.classList.remove('hidden');
+            cleanUpConnection();
+        }
+
+        async function hangUp() {
+            if (state.currentRoomId) {
+                await deleteDoc(doc(db, 'rooms', state.currentRoomId));
+            }
+            cleanUpConnection();
+            resetState();
+            startApp();
+        }
+        
+        function cleanUpConnection() {
+            if (state.peerConnection) {
+                state.peerConnection.close();
+            }
+            if (state.unsubCandidates) state.unsubCandidates();
+            if (state.unsubMessages) state.unsubMessages();
+            
+            remoteVideo.srcObject = null;
+            messagesContainer.innerHTML = '';
+        }
+        
+        function resetState() {
+             state.remoteStream = null;
+             state.peerConnection = null;
+             state.currentRoomId = null;
+             state.unsubRoom = null;
+             state.unsubCandidates = null;
+             state.unsubMessages = null;
+        }
+        
+        toggleMicBtn.onclick = () => {
+            state.isMicOn = !state.isMicOn;
+            state.localStream.getAudioTracks().forEach(track => track.enabled = state.isMicOn);
+            toggleMicBtn.innerHTML = state.isMicOn ? '<i class="fas fa-microphone"></i>' : '<i class="fas fa-microphone-slash"></i>';
+            toggleMicBtn.classList.toggle('bg-gray-700', !state.isMicOn);
+            toggleMicBtn.classList.toggle('bg-indigo-600', state.isMicOn);
+        };
+        
+        toggleCamBtn.onclick = () => {
+            state.isCamOn = !state.isCamOn;
+            state.localStream.getVideoTracks().forEach(track => track.enabled = state.isCamOn);
+            toggleCamBtn.innerHTML = state.isCamOn ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
+            toggleCamBtn.classList.toggle('bg-gray-700', !state.isCamOn);
+            toggleCamBtn.classList.toggle('bg-indigo-600', state.isCamOn);
+        };
+
+        // --- START THE APP ---
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+
+    </script>
+</body>
+</html>
